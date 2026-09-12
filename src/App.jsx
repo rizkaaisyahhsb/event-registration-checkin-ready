@@ -1406,6 +1406,7 @@ function ScanPage() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState("");
+  const [facingMode, setFacingMode] = useState("environment");
 
   useEffect(() => {
     const scanner = new Html5Qrcode(
@@ -1437,7 +1438,7 @@ function ScanPage() {
     try {
       await scannerRef.current.start(
         {
-          facingMode: "environment",
+          facingMode,
         },
         {
           fps: 10,
@@ -1600,6 +1601,49 @@ function ScanPage() {
     await start();
   }
 
+  async function toggleCamera() {
+    const wasRunning = running;
+
+    if (wasRunning) {
+      await stop();
+    }
+
+    const nextFacingMode =
+      facingMode === "environment"
+        ? "user"
+        : "environment";
+
+    setFacingMode(nextFacingMode);
+
+    if (wasRunning) {
+      // Tunggu state ter-update sebelum start ulang
+      // dengan kamera yang baru.
+      setTimeout(async () => {
+        try {
+          await scannerRef.current.start(
+            { facingMode: nextFacingMode },
+            {
+              fps: 10,
+              qrbox: { width: 240, height: 240 },
+            },
+            async (decodedText) => {
+              await handleScan(decodedText);
+            },
+            () => { }
+          );
+
+          setRunning(true);
+        } catch (error) {
+          console.error(error);
+
+          setMessage(
+            "Kamera tidak bisa dibuka. Pastikan izin kamera diberikan dan website menggunakan HTTPS."
+          );
+        }
+      }, 300);
+    }
+  }
+
   return (
     <div className="content">
       <div className="page-heading">
@@ -1645,6 +1689,13 @@ function ScanPage() {
             Hentikan kamera
           </button>
         )}
+
+        <button
+          className="btn secondary full"
+          onClick={toggleCamera}
+        >
+          Ganti kamera ({facingMode === "environment" ? "belakang" : "depan"})
+        </button>
       </section>
 
       {result && (
