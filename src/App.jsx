@@ -411,7 +411,7 @@ function Dashboard() {
     const { data, error } = await supabase
       .from("participants")
       .select(
-        "id,name,shirt_size,whatsapp,checked_in_at,created_at"
+        "id,name,shirt_size,whatsapp,checked_in_at,wa_sent_at,created_at"
       )
       .order("created_at", {
         ascending: false,
@@ -581,12 +581,32 @@ function ParticipantTable({
   const navigate = useNavigate();
 
   const [query, setQuery] = useState("");
+  const [localSentAt, setLocalSentAt] = useState({});
 
   const filtered = rows.filter((row) =>
     row.name
       .toLowerCase()
       .includes(query.toLowerCase())
   );
+
+  function markWhatsappSent(id) {
+    const now = new Date().toISOString();
+
+    setLocalSentAt((prev) => ({
+      ...prev,
+      [id]: now,
+    }));
+
+    supabase
+      .from("participants")
+      .update({ wa_sent_at: now })
+      .eq("id", id)
+      .then(({ error }) => {
+        if (error) {
+          console.error(error);
+        }
+      });
+  }
 
   return (
     <div>
@@ -693,6 +713,56 @@ function ParticipantTable({
                         >
                           <ExternalLink size={16} />
                         </Link>
+
+                        {whatsappNumber(row.whatsapp) ? (
+                          <a
+                            className="icon-btn"
+                            title="Kirim WhatsApp"
+                            href={`https://wa.me/${whatsappNumber(
+                              row.whatsapp
+                            )}?text=${encodeURIComponent(
+                              `Halo ${row.name}, ini e-ticket kamu: ${publicParticipantUrl(
+                                row.id
+                              )}`
+                            )}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={() =>
+                              markWhatsappSent(row.id)
+                            }
+                          >
+                            <Smartphone size={16} />
+                          </a>
+                        ) : (
+                          <button
+                            className="icon-btn"
+                            title="Nomor WhatsApp belum diisi"
+                            disabled
+                          >
+                            <Smartphone size={16} />
+                          </button>
+                        )}
+
+                        {(() => {
+                          const sentAt =
+                            localSentAt[row.id] ||
+                            row.wa_sent_at;
+
+                          return sentAt ? (
+                            <span
+                              className="pill success"
+                              title={`Terakhir dikirim ${formatDate(
+                                sentAt
+                              )}`}
+                            >
+                              Sudah dikirim
+                            </span>
+                          ) : (
+                            <span className="pill neutral">
+                              Belum dikirim
+                            </span>
+                          );
+                        })()}
                       </div>
                     </td>
                   )}
@@ -721,7 +791,7 @@ function Participants({
     let query = supabase
       .from("participants")
       .select(
-        "id,name,shirt_size,whatsapp,checked_in_at,created_at"
+        "id,name,shirt_size,whatsapp,checked_in_at,wa_sent_at,created_at"
       )
       .order("created_at", {
         ascending: false,
@@ -1472,6 +1542,8 @@ function ScanPage() {
       if (scannerRef.current.isScanning) {
         await scannerRef.current.stop();
       }
+
+      scannerRef.current.clear();
     } catch (error) {
       console.error(error);
     }
@@ -1562,7 +1634,10 @@ function ScanPage() {
 
       const row = getRpcRow(data);
 
-      if (!row) {
+      if (
+        !row ||
+        (!row.success && !row.already_checked_in)
+      ) {
         setMessage(
           "Peserta tidak ditemukan."
         );
